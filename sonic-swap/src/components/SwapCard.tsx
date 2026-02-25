@@ -7,6 +7,7 @@ import { SONIC_MAINNET_CHAIN_ID } from "@sodax/types";
 import type { CreateIntentParams } from "@sodax/sdk";
 import { TokenSelector } from "@/components/TokenSelector";
 import { SlippageSettings } from "@/components/SlippageSettings";
+import { SwapDetails } from "@/components/SwapDetails";
 import { SwapStatusModal } from "@/components/SwapStatusModal";
 import { useSwapQuote } from "@/hooks/useSwapQuote";
 import { useSwapExecution } from "@/hooks/useSwapExecution";
@@ -276,6 +277,22 @@ export function SwapCard() {
     return `1 ${sellToken.symbol} = ${rate.toFixed(4)} ${buyToken.symbol}`;
   }, [sellAmountStr, buyAmountStr, sellToken, buyToken]);
 
+  // Minimum received after slippage
+  const minReceived = useMemo(() => {
+    if (!quotedAmount) return null;
+    return (quotedAmount * BigInt(10000 - slippage)) / 10000n;
+  }, [quotedAmount, slippage]);
+
+  // Price impact: compare quoted output value vs input value at market rate
+  const priceImpact = useMemo((): number | null => {
+    if (!sellPrice || !buyPrice || !sellAmountStr || !buyAmountStr) return null;
+    const sellVal = parseFloat(sellAmountStr) * sellPrice;
+    const buyVal = parseFloat(buyAmountStr) * buyPrice;
+    if (sellVal === 0) return null;
+    const impact = ((sellVal - buyVal) / sellVal) * 100;
+    return Math.max(0, impact); // only show positive (negative means user benefits)
+  }, [sellPrice, buyPrice, sellAmountStr, buyAmountStr]);
+
   // USD values
   const sellUsd =
     sellPrice && sellAmountStr
@@ -374,19 +391,23 @@ export function SwapCard() {
             You buy
           </div>
           <div className="flex items-center justify-between gap-2">
-            <span
-              className={`flex-1 text-3xl font-medium ${
-                buyAmountStr
-                  ? "text-zinc-900 dark:text-zinc-50"
-                  : "text-zinc-300 dark:text-zinc-600"
-              }`}
-            >
-              {buyAmountStr
-                ? parseFloat(buyAmountStr).toFixed(
-                    Math.min(buyToken?.decimals || 6, 6)
-                  )
-                : "0"}
-            </span>
+            {quoteLoading || isDebouncing ? (
+              <div className="h-9 w-32 animate-pulse rounded-lg bg-zinc-200 dark:bg-zinc-700" />
+            ) : (
+              <span
+                className={`flex-1 text-3xl font-medium ${
+                  buyAmountStr
+                    ? "text-zinc-900 dark:text-zinc-50"
+                    : "text-zinc-300 dark:text-zinc-600"
+                }`}
+              >
+                {buyAmountStr
+                  ? parseFloat(buyAmountStr).toFixed(
+                      Math.min(buyToken?.decimals || 6, 6)
+                    )
+                  : "0"}
+              </span>
+            )}
             <TokenSelector
               selectedToken={buyToken}
               onSelect={setBuyToken}
@@ -401,11 +422,41 @@ export function SwapCard() {
           )}
         </div>
 
-        {/* Exchange Rate */}
-        {exchangeRate && (
-          <div className="mt-3 rounded-lg bg-zinc-50 px-3 py-2 dark:bg-zinc-800/30">
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              {exchangeRate}
+        {/* Swap Details (rate, fees, slippage, price impact) */}
+        {sellToken && buyToken && exchangeRate && (
+          <SwapDetails
+            sellSymbol={sellToken.symbol}
+            buySymbol={buyToken.symbol}
+            exchangeRate={exchangeRate}
+            minReceived={minReceived}
+            buyDecimals={buyToken.decimals}
+            slippage={slippage}
+            priceImpact={priceImpact}
+          />
+        )}
+
+        {/* Price impact warning */}
+        {priceImpact !== null && priceImpact > 5 && (
+          <div className="mt-2 flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 dark:bg-red-950/20">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0 text-red-500"
+            >
+              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+              <path d="M12 9v4" />
+              <path d="M12 17h.01" />
+            </svg>
+            <p className="text-xs font-medium text-red-600 dark:text-red-400">
+              High price impact ({priceImpact.toFixed(1)}%). You may receive
+              significantly fewer tokens.
             </p>
           </div>
         )}

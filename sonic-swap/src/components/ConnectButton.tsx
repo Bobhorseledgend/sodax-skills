@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useAccount, useDisconnect } from "wagmi";
 import { truncateAddress } from "@/lib/utils";
@@ -16,14 +16,27 @@ import { truncateAddress } from "@/lib/utils";
  */
 export function ConnectButton() {
   const [showMenu, setShowMenu] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const { login, logout, ready, authenticated, user } = usePrivy();
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
 
+  // Close on click outside
+  useEffect(() => {
+    if (!showMenu) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showMenu]);
+
   // Connected state — show address + disconnect
   if (isConnected && address) {
     return (
-      <div className="relative">
+      <div className="relative" ref={containerRef}>
         <button
           type="button"
           onClick={() => setShowMenu(!showMenu)}
@@ -70,7 +83,7 @@ export function ConnectButton() {
 
   // Not connected — show connect options
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         type="button"
         onClick={() => setShowMenu(!showMenu)}

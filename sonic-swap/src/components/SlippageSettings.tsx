@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 const PRESETS = [
   { label: "0.5%", value: 50 },
@@ -16,12 +16,25 @@ interface SlippageSettingsProps {
 export function SlippageSettings({ slippage, onChange }: SlippageSettingsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [customValue, setCustomValue] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close on click outside
+  useEffect(() => {
+    if (!isOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
 
   const isCustom = !PRESETS.some((p) => p.value === slippage);
   const displayValue = (slippage / 100).toFixed(1);
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}

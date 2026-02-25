@@ -39,3 +39,11 @@ Tracks issues found during implementation that should be fed back into the SODAX
 - **Fix applied:** Used `r.value[0]?.intent_hash` and captured `r.value[2]?.srcTxHash` from `IntentDeliveryInfo` for the block explorer link.
 - **Skill amendment:** Add documentation for the `CreateIntentResult` type showing it's `Result<[SolverExecutionResponse, Intent, IntentDeliveryInfo], IntentError>` with `SolverExecutionResponse = { answer: 'OK', intent_hash: Hex }` and `IntentDeliveryInfo = { srcTxHash, srcChainId, dstTxHash, dstChainId, ... }`.
 - **Status:** Pending
+
+## 2026-02-25 — Feature 9: UseQueryOptions requires queryKey when passed as queryOptions
+- **Skill affected:** Skill 11 (Backend Data Queries)
+- **What broke:** TypeScript error TS2741 — `Property 'queryKey' is missing in type '{ refetchInterval: number }' but required in type 'UseQueryOptions<...>'` when passing `queryOptions: { refetchInterval: 15000 }` to `useBackendOrderbook` or `useBackendIntentByHash`.
+- **Root cause:** The SDK types `UseBackendOrderbookParams.queryOptions` and `UseBackendIntentByHashParams.queryOptions` are typed as `UseQueryOptions<...>` which requires `queryKey`. The hooks internally set `queryKey`, but the type doesn't use `Omit` or `Partial` to make `queryKey` optional for consumers.
+- **Fix applied:** Used `as any` cast on queryOptions to bypass the strict typing.
+- **Skill amendment:** Add a note in Skill 11 that when passing custom `queryOptions`, you need to cast with `as any` because the SDK type incorrectly requires `queryKey`. Example: `queryOptions: { refetchInterval: 15000 } as any`. Alternatively, document the full type workaround.
+- **Status:** Pending

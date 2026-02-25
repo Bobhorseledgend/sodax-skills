@@ -16,18 +16,22 @@ export function formatTokenAmount(
   decimals: number,
   maxDecimals = 6
 ): string {
-  const value =
-    typeof amount === "string" ? BigInt(amount) : amount;
-  const divisor = 10n ** BigInt(decimals);
-  const whole = value / divisor;
-  const fraction = value % divisor;
+  try {
+    const value =
+      typeof amount === "string" ? BigInt(amount) : amount;
+    const divisor = 10n ** BigInt(decimals);
+    const whole = value / divisor;
+    const fraction = value % divisor;
 
-  if (fraction === 0n) return whole.toString();
+    if (fraction === 0n) return whole.toString();
 
-  const fractionStr = fraction.toString().padStart(decimals, "0");
-  const trimmed = fractionStr.slice(0, maxDecimals).replace(/0+$/, "");
+    const fractionStr = fraction.toString().padStart(decimals, "0");
+    const trimmed = fractionStr.slice(0, maxDecimals).replace(/0+$/, "");
 
-  return trimmed ? `${whole}.${trimmed}` : whole.toString();
+    return trimmed ? `${whole}.${trimmed}` : whole.toString();
+  } catch {
+    return "—";
+  }
 }
 
 /**

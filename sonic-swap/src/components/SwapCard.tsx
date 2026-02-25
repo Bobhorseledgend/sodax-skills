@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { parseUnits, formatUnits } from "viem";
+import Link from "next/link";
 import { SONIC_MAINNET_CHAIN_ID } from "@sodax/types";
 import type { CreateIntentParams } from "@sodax/sdk";
 import { TokenSelector } from "@/components/TokenSelector";
@@ -510,9 +511,17 @@ export function SwapCard() {
       {/* Recent swaps (mini list, last 3) */}
       {history.length > 0 && (
         <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <span className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Recent Swaps
-          </span>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Recent Swaps
+            </span>
+            <Link
+              href="/activity"
+              className="text-xs text-blue-500 hover:text-blue-600"
+            >
+              View all
+            </Link>
+          </div>
           <div className="space-y-1.5">
             {history.slice(0, 3).map((entry) => (
               <a

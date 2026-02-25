@@ -62,7 +62,9 @@ export function formatCompact(value: number): string {
 export function rayToPercent(rayValue: string | bigint): string {
   try {
     const value = typeof rayValue === "string" ? BigInt(rayValue) : rayValue;
-    const percent = (Number(value) / Number(RAY)) * 100;
+    // Use BigInt arithmetic first to avoid precision loss (RAY = 10^27 > Number.MAX_SAFE_INTEGER)
+    const basisPoints = Number((value * 10000n) / RAY);
+    const percent = basisPoints / 100;
     return percent.toFixed(2) + "%";
   } catch {
     return "—";

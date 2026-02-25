@@ -1,9 +1,8 @@
 "use client";
 
+import { zeroAddress } from "viem";
 import { useIntentRelay } from "@/hooks/useIntentRelay";
 import { truncateAddress, formatTokenAmount } from "@/lib/utils";
-
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 interface IntentDetailModalProps {
   intentHash: string;
@@ -156,7 +155,7 @@ export function IntentDetailModal({
               <DetailRow
                 label="Solver"
                 value={
-                  intentData.intent.solver === ZERO_ADDRESS
+                  intentData.intent.solver === zeroAddress
                     ? "None (default)"
                     : truncateAddress(intentData.intent.solver, 6)
                 }

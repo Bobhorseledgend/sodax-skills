@@ -1,4 +1,16 @@
 /**
+ * Shared token type used across components.
+ * Represents a token on the Sonic chain as returned by ConfigService.
+ */
+export interface TokenInfo {
+  symbol: string;
+  name: string;
+  address: string;
+  decimals: number;
+  coinGeckoId?: string;
+}
+
+/**
  * Truncate an Ethereum address for display.
  * "0x1234567890abcdef..." → "0x1234...cdef"
  */

@@ -52,10 +52,12 @@ export function useSwapStatus(txHash: string | null | undefined) {
   const [fillTxHash, setFillTxHash] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
 
-  // useStatus expects Hex — pass undefined to disable polling
+  // useStatus expects Hex — cast to any since useStatus typing doesn't accept undefined
+  // but the hook internally disables polling when no hash is provided
   const hashHex = txHash ? (txHash as Hex) : undefined;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: statusResult, isLoading, error, refetch } = useStatus(
-    hashHex!
+    hashHex as any
   );
 
   useEffect(() => {

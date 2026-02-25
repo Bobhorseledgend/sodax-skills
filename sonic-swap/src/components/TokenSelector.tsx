@@ -1,17 +1,11 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { zeroAddress } from "viem";
 import { useSonicTokens } from "@/hooks/useSonicTokens";
 import { useTokenBalances } from "@/hooks/useTokenBalances";
 import { formatTokenAmount } from "@/lib/utils";
-
-interface TokenInfo {
-  symbol: string;
-  name: string;
-  address: string;
-  decimals: number;
-  coinGeckoId?: string;
-}
+import type { TokenInfo } from "@/lib/utils";
 
 interface TokenSelectorProps {
   selectedToken: TokenInfo | null;
@@ -19,8 +13,6 @@ interface TokenSelectorProps {
   otherToken: TokenInfo | null; // the other side of the swap (to exclude)
   label?: string;
 }
-
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 export function TokenSelector({
   selectedToken,
@@ -57,11 +49,11 @@ export function TokenSelector({
         // Sort tokens with balance first
         const aBalance =
           balances?.[
-            (a.address || ZERO_ADDRESS).toLowerCase()
+            (a.address || zeroAddress).toLowerCase()
           ]?.balance ?? 0n;
         const bBalance =
           balances?.[
-            (b.address || ZERO_ADDRESS).toLowerCase()
+            (b.address || zeroAddress).toLowerCase()
           ]?.balance ?? 0n;
         if (aBalance > 0n && bBalance === 0n) return -1;
         if (bBalance > 0n && aBalance === 0n) return 1;
@@ -165,7 +157,7 @@ export function TokenSelector({
                 </div>
               ) : (
                 filteredTokens.map((token: TokenInfo) => {
-                  const addr = (token.address || ZERO_ADDRESS).toLowerCase();
+                  const addr = (token.address || zeroAddress).toLowerCase();
                   const balance = balances?.[addr];
                   const isSelected =
                     selectedToken?.address.toLowerCase() ===
@@ -173,7 +165,7 @@ export function TokenSelector({
 
                   return (
                     <button
-                      key={token.address || ZERO_ADDRESS}
+                      key={token.address || zeroAddress}
                       type="button"
                       onClick={() => {
                         onSelect(token);

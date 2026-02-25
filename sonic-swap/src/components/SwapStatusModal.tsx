@@ -280,7 +280,7 @@ export function SwapStatusModal({
                   : "flex-1 bg-blue-500 text-white hover:bg-blue-600"
             }`}
           >
-            {isFilled ? "Done" : isFailed ? "Close" : "Close"}
+            {isFilled ? "Done" : "Close"}
           </button>
         </div>
       </div>

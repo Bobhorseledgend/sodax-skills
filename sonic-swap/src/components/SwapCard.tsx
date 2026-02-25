@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useAccount } from "wagmi";
-import { parseUnits, formatUnits } from "viem";
+import { parseUnits, formatUnits, zeroAddress } from "viem";
 import Link from "next/link";
 import { SONIC_MAINNET_CHAIN_ID } from "@sodax/types";
 import type { CreateIntentParams } from "@sodax/sdk";
@@ -17,16 +17,7 @@ import { useTokenBalances } from "@/hooks/useTokenBalances";
 import { useSwapHistory } from "@/hooks/useSwapHistory";
 import { useSwapFees } from "@/hooks/useSwapFees";
 import { formatTokenAmount, formatUSD } from "@/lib/utils";
-
-interface TokenInfo {
-  symbol: string;
-  name: string;
-  address: string;
-  decimals: number;
-  coinGeckoId?: string;
-}
-
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+import type { TokenInfo } from "@/lib/utils";
 
 export function SwapCard() {
   const { address, isConnected } = useAccount();
@@ -120,7 +111,7 @@ export function SwapCard() {
   );
   const { data: balances } = useTokenBalances(tokensForBalance);
   const sellBalance = sellToken
-    ? balances?.[(sellToken.address || ZERO_ADDRESS).toLowerCase()]
+    ? balances?.[(sellToken.address || zeroAddress).toLowerCase()]
     : null;
 
   // Build CreateIntentParams from current state
@@ -139,8 +130,8 @@ export function SwapCard() {
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 300);
 
     return {
-      inputToken: sellToken.address || ZERO_ADDRESS,
-      outputToken: buyToken.address || ZERO_ADDRESS,
+      inputToken: sellToken.address || zeroAddress,
+      outputToken: buyToken.address || zeroAddress,
       inputAmount: sellAmount,
       minOutputAmount,
       deadline,
@@ -149,7 +140,7 @@ export function SwapCard() {
       dstChain: SONIC_MAINNET_CHAIN_ID,
       srcAddress: address,
       dstAddress: address,
-      solver: ZERO_ADDRESS as `0x${string}`,
+      solver: zeroAddress as `0x${string}`,
       data: "0x" as `0x${string}`,
     };
   }, [quotedAmount, sellToken, buyToken, address, sellAmount, slippage]);
@@ -229,7 +220,7 @@ export function SwapCard() {
   const handleMax = useCallback(() => {
     if (!sellBalance || !sellToken) return;
     const isNative =
-      sellToken.address === ZERO_ADDRESS || !sellToken.address;
+      sellToken.address === zeroAddress || !sellToken.address;
     let maxAmount = sellBalance.balance;
     if (isNative) {
       const gasReserve = parseUnits("0.01", sellToken.decimals);

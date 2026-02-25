@@ -2,15 +2,15 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useAccount } from "wagmi";
-import { createPublicClient, http, formatUnits, erc20Abi } from "viem";
+import { createPublicClient, http, formatUnits, erc20Abi, zeroAddress } from "viem";
 import { sonic } from "viem/chains";
+import { rpcConfig } from "@/lib/sodax";
+import { SONIC_MAINNET_CHAIN_ID } from "@sodax/types";
 
 const publicClient = createPublicClient({
   chain: sonic,
-  transport: http("https://rpc.soniclabs.com"),
+  transport: http(rpcConfig[SONIC_MAINNET_CHAIN_ID]),
 });
-
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 interface TokenBalance {
   address: string;
@@ -29,7 +29,7 @@ export function useTokenBalances(
   const { address: walletAddress } = useAccount();
 
   return useQuery({
-    queryKey: ["token-balances", walletAddress, tokens?.length],
+    queryKey: ["token-balances", walletAddress, tokens?.map(t => t.address).sort().join(",")],
     queryFn: async (): Promise<Record<string, TokenBalance>> => {
       if (!walletAddress || !tokens?.length) return {};
 
@@ -41,7 +41,7 @@ export function useTokenBalances(
           let balance: bigint;
 
           if (
-            token.address === ZERO_ADDRESS ||
+            token.address === zeroAddress ||
             token.address === "" ||
             !token.address
           ) {
@@ -60,7 +60,7 @@ export function useTokenBalances(
           }
 
           return {
-            address: token.address || ZERO_ADDRESS,
+            address: token.address || zeroAddress,
             balance,
             formatted: formatUnits(balance, token.decimals),
           };
@@ -69,7 +69,7 @@ export function useTokenBalances(
 
       results.forEach((result, i) => {
         if (result.status === "fulfilled") {
-          const addr = tokens[i].address || ZERO_ADDRESS;
+          const addr = tokens[i].address || zeroAddress;
           balances[addr.toLowerCase()] = result.value;
         }
       });

@@ -7,6 +7,7 @@ import { ConnectButton } from "@/components/ConnectButton";
 const NAV_ITEMS = [
   { href: "/", label: "Swap" },
   { href: "/activity", label: "Activity" },
+  { href: "/analytics", label: "Analytics" },
 ];
 
 export function Header() {

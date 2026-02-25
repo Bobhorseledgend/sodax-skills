@@ -6,11 +6,14 @@ import { formatTokenAmount } from "@/lib/utils";
 interface SwapDetailsProps {
   sellSymbol: string;
   buySymbol: string;
+  sellDecimals: number;
   exchangeRate: string | null;
   minReceived: bigint | null;
   buyDecimals: number;
   slippage: number; // basis points
   priceImpact: number | null; // percentage
+  solverFee: bigint | null;
+  partnerFee: bigint | null;
 }
 
 /**
@@ -23,11 +26,14 @@ interface SwapDetailsProps {
 export function SwapDetails({
   sellSymbol,
   buySymbol,
+  sellDecimals,
   exchangeRate,
   minReceived,
   buyDecimals,
   slippage,
   priceImpact,
+  solverFee,
+  partnerFee,
 }: SwapDetailsProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -100,6 +106,30 @@ export function SwapDetails({
               </span>
               <span className={`text-xs font-medium ${priceImpactColor}`}>
                 {priceImpact < 0.01 ? "<0.01" : priceImpact.toFixed(2)}%
+              </span>
+            </div>
+          )}
+
+          {/* Solver fee */}
+          {solverFee !== null && solverFee > 0n && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-zinc-400 dark:text-zinc-500">
+                Network fee (0.1%)
+              </span>
+              <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                {formatTokenAmount(solverFee, sellDecimals)} {sellSymbol}
+              </span>
+            </div>
+          )}
+
+          {/* Partner fee */}
+          {partnerFee !== null && partnerFee > 0n && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-zinc-400 dark:text-zinc-500">
+                Partner fee (1%)
+              </span>
+              <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                {formatTokenAmount(partnerFee, sellDecimals)} {sellSymbol}
               </span>
             </div>
           )}

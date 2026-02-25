@@ -14,6 +14,7 @@ import { useSwapExecution } from "@/hooks/useSwapExecution";
 import { useTokenPrice } from "@/hooks/useTokenPrice";
 import { useTokenBalances } from "@/hooks/useTokenBalances";
 import { useSwapHistory } from "@/hooks/useSwapHistory";
+import { useSwapFees } from "@/hooks/useSwapFees";
 import { formatTokenAmount, formatUSD } from "@/lib/utils";
 
 interface TokenInfo {
@@ -56,6 +57,11 @@ export function SwapCard() {
       return 0n;
     }
   }, [sellAmountStr, sellToken]);
+
+  // Fee calculations
+  const { solverFee, partnerFee } = useSwapFees(
+    sellAmount > 0n ? sellAmount : null
+  );
 
   // Get quote
   const {
@@ -427,11 +433,14 @@ export function SwapCard() {
           <SwapDetails
             sellSymbol={sellToken.symbol}
             buySymbol={buyToken.symbol}
+            sellDecimals={sellToken.decimals}
             exchangeRate={exchangeRate}
             minReceived={minReceived}
             buyDecimals={buyToken.decimals}
             slippage={slippage}
             priceImpact={priceImpact}
+            solverFee={solverFee}
+            partnerFee={partnerFee}
           />
         )}
 

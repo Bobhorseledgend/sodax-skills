@@ -1,18 +1,17 @@
+"use client";
+
+import { useAccount } from "wagmi";
+import { Header } from "@/components/Header";
+
 export default function Home() {
+  const { isConnected } = useAccount();
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-zinc-950">
       <main className="flex w-full max-w-[480px] flex-col gap-4 px-4 py-8">
-        {/* Header — F3 will add ConnectButton here */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-            Sonic Swap
-          </h1>
-          <div className="rounded-full bg-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-            Connect Wallet
-          </div>
-        </div>
+        <Header />
 
-        {/* Swap Card Shell — F4/F5 will build the real swap interface */}
+        {/* Swap Card — F4/F5 will build TokenSelector + swap logic */}
         <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           {/* Sell Section */}
           <div className="rounded-xl bg-zinc-50 p-4 dark:bg-zinc-800/50">
@@ -30,7 +29,7 @@ export default function Home() {
           </div>
 
           {/* Swap Direction Button */}
-          <div className="flex justify-center -my-2 relative z-10">
+          <div className="relative z-10 -my-2 flex justify-center">
             <button
               type="button"
               className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 shadow-sm transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800"
@@ -71,13 +70,13 @@ export default function Home() {
           <button
             type="button"
             className="mt-4 w-full rounded-2xl bg-blue-500 py-4 text-center text-base font-semibold text-white transition-colors hover:bg-blue-600 disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
-            disabled
+            disabled={!isConnected}
           >
-            Connect Wallet
+            {isConnected ? "Enter an amount" : "Connect Wallet"}
           </button>
         </div>
 
-        {/* Footer info */}
+        {/* Footer */}
         <p className="text-center text-xs text-zinc-400 dark:text-zinc-600">
           Powered by SODAX — Sonic chain
         </p>

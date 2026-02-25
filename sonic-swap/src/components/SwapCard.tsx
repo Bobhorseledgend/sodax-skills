@@ -1,16 +1,18 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { parseUnits, formatUnits } from "viem";
 import { SONIC_MAINNET_CHAIN_ID } from "@sodax/types";
 import type { CreateIntentParams } from "@sodax/sdk";
 import { TokenSelector } from "@/components/TokenSelector";
 import { SlippageSettings } from "@/components/SlippageSettings";
+import { SwapStatusModal } from "@/components/SwapStatusModal";
 import { useSwapQuote } from "@/hooks/useSwapQuote";
 import { useSwapExecution } from "@/hooks/useSwapExecution";
 import { useTokenPrice } from "@/hooks/useTokenPrice";
 import { useTokenBalances } from "@/hooks/useTokenBalances";
+import { useSwapHistory } from "@/hooks/useSwapHistory";
 import { formatTokenAmount, formatUSD } from "@/lib/utils";
 
 interface TokenInfo {
@@ -31,6 +33,18 @@ export function SwapCard() {
   const [buyToken, setBuyToken] = useState<TokenInfo | null>(null);
   const [sellAmountStr, setSellAmountStr] = useState("");
   const [slippage, setSlippage] = useState(100); // 1% default (basis points)
+
+  // Status modal
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [activeSwapInfo, setActiveSwapInfo] = useState<{
+    sellSymbol: string;
+    buySymbol: string;
+    sellAmount: string;
+    buyAmount: string;
+  } | null>(null);
+
+  // Swap history
+  const { history, addSwap, updateSwapStatus } = useSwapHistory();
 
   // Parse sell amount to bigint
   const sellAmount = useMemo(() => {
@@ -55,11 +69,8 @@ export function SwapCard() {
   });
 
   // Extract quoted_amount from Result wrapper
-  // useQuote returns Result<SolverIntentQuoteResponse, SolverErrorResponse> | undefined
-  // where SolverIntentQuoteResponse = { quoted_amount: bigint }
   const quotedAmount = useMemo((): bigint | null => {
     if (!quoteResult) return null;
-    // Unwrap Result type: { ok: true, value: { quoted_amount } } | { ok: false, error }
     if (
       typeof quoteResult === "object" &&
       "ok" in quoteResult &&
@@ -68,7 +79,6 @@ export function SwapCard() {
       const value = (
         quoteResult as { ok: true; value: { quoted_amount: bigint | string } }
       ).value;
-      // Handle both bigint and string representations
       const raw = value.quoted_amount;
       return typeof raw === "bigint" ? raw : BigInt(String(raw));
     }
@@ -106,7 +116,6 @@ export function SwapCard() {
     : null;
 
   // Build CreateIntentParams from current state
-  // This feeds into useSwapExecution for approval checking and swap execution
   const intentParams = useMemo((): CreateIntentParams | undefined => {
     if (
       !quotedAmount ||
@@ -117,12 +126,8 @@ export function SwapCard() {
     )
       return undefined;
 
-    // Calculate minOutputAmount with slippage
-    // slippage is in basis points: 100 = 1%, so minOutput = quoted * (10000 - slippage) / 10000
     const minOutputAmount =
       (quotedAmount * BigInt(10000 - slippage)) / 10000n;
-
-    // Deadline: 5 minutes from now (as bigint seconds)
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 300);
 
     return {
@@ -141,9 +146,67 @@ export function SwapCard() {
     };
   }, [quotedAmount, sellToken, buyToken, address, sellAmount, slippage]);
 
-  // Swap execution (pass intentParams for approval checking)
+  // Swap execution
   const { execute, reset, stage, intentHash, txHash, error, isApproving } =
     useSwapExecution(intentParams);
+
+  // Show status modal when swap succeeds
+  useEffect(() => {
+    if (stage === "success" && intentHash && sellToken && buyToken) {
+      // Capture swap info for the modal
+      setActiveSwapInfo({
+        sellSymbol: sellToken.symbol,
+        buySymbol: buyToken.symbol,
+        sellAmount: sellAmountStr,
+        buyAmount: buyAmountStr
+          ? parseFloat(buyAmountStr).toFixed(
+              Math.min(buyToken.decimals, 6)
+            )
+          : "",
+      });
+      setShowStatusModal(true);
+
+      // Add to swap history
+      addSwap({
+        id: intentHash,
+        intentHash,
+        txHash: txHash || intentHash,
+        sellSymbol: sellToken.symbol,
+        buySymbol: buyToken.symbol,
+        sellAmount: sellAmountStr,
+        buyAmount: buyAmountStr
+          ? parseFloat(buyAmountStr).toFixed(
+              Math.min(buyToken.decimals, 6)
+            )
+          : "",
+      });
+    }
+  // Only trigger when stage transitions to success
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, intentHash]);
+
+  // Handle status modal status changes → update history
+  const handleStatusChange = useCallback(
+    (status: string, fillTxHash?: string) => {
+      if (intentHash) {
+        updateSwapStatus(
+          intentHash,
+          status as "filled" | "failed" | "pending" | "unknown",
+          fillTxHash
+        );
+      }
+    },
+    [intentHash, updateSwapStatus]
+  );
+
+  // Handle closing the status modal
+  const handleCloseStatusModal = useCallback(() => {
+    setShowStatusModal(false);
+    setActiveSwapInfo(null);
+    // Reset the swap form for a new swap
+    reset();
+    setSellAmountStr("");
+  }, [reset]);
 
   // Swap direction toggle
   const flipTokens = useCallback(() => {
@@ -160,7 +223,6 @@ export function SwapCard() {
     const isNative =
       sellToken.address === ZERO_ADDRESS || !sellToken.address;
     let maxAmount = sellBalance.balance;
-    // Reserve gas for native token (0.01 S)
     if (isNative) {
       const gasReserve = parseUnits("0.01", sellToken.decimals);
       maxAmount = maxAmount > gasReserve ? maxAmount - gasReserve : 0n;
@@ -168,7 +230,7 @@ export function SwapCard() {
     setSellAmountStr(formatUnits(maxAmount, sellToken.decimals));
   }, [sellBalance, sellToken]);
 
-  // Execute swap (approve → swap handled inside useSwapExecution)
+  // Execute swap
   const handleSwap = useCallback(async () => {
     if (!intentParams) return;
     try {
@@ -225,181 +287,219 @@ export function SwapCard() {
       : null;
 
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      {/* Settings row */}
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          Swap
-        </span>
-        <SlippageSettings slippage={slippage} onChange={setSlippage} />
-      </div>
-
-      {/* Sell Section */}
-      <div className="rounded-xl bg-zinc-50 p-4 dark:bg-zinc-800/50">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-sm text-zinc-500 dark:text-zinc-400">
-            You sell
+    <>
+      <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        {/* Settings row */}
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Swap
           </span>
-          {sellBalance && sellToken && (
-            <button
-              type="button"
-              onClick={handleMax}
-              className="text-xs text-zinc-400 transition-colors hover:text-blue-500 dark:text-zinc-500"
-            >
-              Balance:{" "}
-              {formatTokenAmount(sellBalance.balance, sellToken.decimals)}{" "}
-              <span className="font-medium text-blue-500">MAX</span>
-            </button>
+          <SlippageSettings slippage={slippage} onChange={setSlippage} />
+        </div>
+
+        {/* Sell Section */}
+        <div className="rounded-xl bg-zinc-50 p-4 dark:bg-zinc-800/50">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm text-zinc-500 dark:text-zinc-400">
+              You sell
+            </span>
+            {sellBalance && sellToken && (
+              <button
+                type="button"
+                onClick={handleMax}
+                className="text-xs text-zinc-400 transition-colors hover:text-blue-500 dark:text-zinc-500"
+              >
+                Balance:{" "}
+                {formatTokenAmount(sellBalance.balance, sellToken.decimals)}{" "}
+                <span className="font-medium text-blue-500">MAX</span>
+              </button>
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <input
+              type="text"
+              inputMode="decimal"
+              placeholder="0"
+              value={sellAmountStr}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^0-9.]/g, "");
+                if (val.split(".").length <= 2) {
+                  setSellAmountStr(val);
+                  if (stage === "error") reset();
+                }
+              }}
+              className="w-0 flex-1 bg-transparent text-3xl font-medium text-zinc-900 placeholder:text-zinc-300 focus:outline-none dark:text-zinc-50 dark:placeholder:text-zinc-600"
+            />
+            <TokenSelector
+              selectedToken={sellToken}
+              onSelect={setSellToken}
+              otherToken={buyToken}
+              label="Sell token"
+            />
+          </div>
+          {sellUsd && (
+            <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+              {sellUsd}
+            </p>
           )}
         </div>
-        <div className="flex items-center justify-between gap-2">
-          <input
-            type="text"
-            inputMode="decimal"
-            placeholder="0"
-            value={sellAmountStr}
-            onChange={(e) => {
-              // Allow only numbers and decimal
-              const val = e.target.value.replace(/[^0-9.]/g, "");
-              if (val.split(".").length <= 2) {
-                setSellAmountStr(val);
-                if (stage === "error") reset();
-              }
-            }}
-            className="w-0 flex-1 bg-transparent text-3xl font-medium text-zinc-900 placeholder:text-zinc-300 focus:outline-none dark:text-zinc-50 dark:placeholder:text-zinc-600"
-          />
-          <TokenSelector
-            selectedToken={sellToken}
-            onSelect={setSellToken}
-            otherToken={buyToken}
-            label="Sell token"
-          />
-        </div>
-        {sellUsd && (
-          <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
-            {sellUsd}
-          </p>
-        )}
-      </div>
 
-      {/* Swap Direction Button */}
-      <div className="relative z-10 -my-2 flex justify-center">
+        {/* Swap Direction Button */}
+        <div className="relative z-10 -my-2 flex justify-center">
+          <button
+            type="button"
+            onClick={flipTokens}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 shadow-sm transition-all hover:rotate-180 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 5v14" />
+              <path d="m19 12-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Buy Section */}
+        <div className="rounded-xl bg-zinc-50 p-4 dark:bg-zinc-800/50">
+          <div className="mb-2 text-sm text-zinc-500 dark:text-zinc-400">
+            You buy
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span
+              className={`flex-1 text-3xl font-medium ${
+                buyAmountStr
+                  ? "text-zinc-900 dark:text-zinc-50"
+                  : "text-zinc-300 dark:text-zinc-600"
+              }`}
+            >
+              {buyAmountStr
+                ? parseFloat(buyAmountStr).toFixed(
+                    Math.min(buyToken?.decimals || 6, 6)
+                  )
+                : "0"}
+            </span>
+            <TokenSelector
+              selectedToken={buyToken}
+              onSelect={setBuyToken}
+              otherToken={sellToken}
+              label="Buy token"
+            />
+          </div>
+          {buyUsd && (
+            <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+              {buyUsd}
+            </p>
+          )}
+        </div>
+
+        {/* Exchange Rate */}
+        {exchangeRate && (
+          <div className="mt-3 rounded-lg bg-zinc-50 px-3 py-2 dark:bg-zinc-800/30">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              {exchangeRate}
+            </p>
+          </div>
+        )}
+
+        {/* Swap Button */}
         <button
           type="button"
-          onClick={flipTokens}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 shadow-sm transition-all hover:rotate-180 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800"
+          onClick={buttonState.disabled ? undefined : handleSwap}
+          disabled={buttonState.disabled}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-500 py-4 text-base font-semibold text-white transition-colors hover:bg-blue-600 disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M12 5v14" />
-            <path d="m19 12-7 7-7-7" />
-          </svg>
+          {buttonState.loading && (
+            <svg
+              className="h-4 w-4 animate-spin"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              />
+            </svg>
+          )}
+          {buttonState.text}
         </button>
+
+        {/* Error message */}
+        {error && stage === "error" && (
+          <p className="mt-2 text-center text-xs text-red-500">{error}</p>
+        )}
       </div>
 
-      {/* Buy Section */}
-      <div className="rounded-xl bg-zinc-50 p-4 dark:bg-zinc-800/50">
-        <div className="mb-2 text-sm text-zinc-500 dark:text-zinc-400">
-          You buy
-        </div>
-        <div className="flex items-center justify-between gap-2">
-          <span
-            className={`flex-1 text-3xl font-medium ${
-              buyAmountStr
-                ? "text-zinc-900 dark:text-zinc-50"
-                : "text-zinc-300 dark:text-zinc-600"
-            }`}
-          >
-            {buyAmountStr
-              ? parseFloat(buyAmountStr).toFixed(
-                  Math.min(buyToken?.decimals || 6, 6)
-                )
-              : "0"}
+      {/* Recent swaps (mini list, last 3) */}
+      {history.length > 0 && (
+        <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <span className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Recent Swaps
           </span>
-          <TokenSelector
-            selectedToken={buyToken}
-            onSelect={setBuyToken}
-            otherToken={sellToken}
-            label="Buy token"
-          />
-        </div>
-        {buyUsd && (
-          <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
-            {buyUsd}
-          </p>
-        )}
-      </div>
-
-      {/* Exchange Rate + Fees */}
-      {exchangeRate && (
-        <div className="mt-3 rounded-lg bg-zinc-50 px-3 py-2 dark:bg-zinc-800/30">
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            {exchangeRate}
-          </p>
-        </div>
-      )}
-
-      {/* Swap Button */}
-      <button
-        type="button"
-        onClick={buttonState.disabled ? undefined : handleSwap}
-        disabled={buttonState.disabled}
-        className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-500 py-4 text-base font-semibold text-white transition-colors hover:bg-blue-600 disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
-      >
-        {buttonState.loading && (
-          <svg
-            className="h-4 w-4 animate-spin"
-            viewBox="0 0 24 24"
-            fill="none"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            />
-          </svg>
-        )}
-        {buttonState.text}
-      </button>
-
-      {/* Error message */}
-      {error && stage === "error" && (
-        <p className="mt-2 text-center text-xs text-red-500">{error}</p>
-      )}
-
-      {/* Success message */}
-      {intentHash && stage === "success" && (
-        <div className="mt-3 rounded-lg bg-green-50 p-3 text-center dark:bg-green-950/30">
-          <p className="text-sm font-medium text-green-700 dark:text-green-400">
-            Swap submitted!
-          </p>
-          <a
-            href={`https://sonicscan.org/tx/${txHash || intentHash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-green-600 underline hover:text-green-500 dark:text-green-400"
-          >
-            View on SonicScan
-          </a>
+          <div className="space-y-1.5">
+            {history.slice(0, 3).map((entry) => (
+              <a
+                key={entry.id}
+                href={`https://sonicscan.org/tx/${entry.fillTxHash || entry.txHash || entry.intentHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2 text-xs transition-colors hover:bg-zinc-100 dark:bg-zinc-800/50 dark:hover:bg-zinc-800"
+              >
+                <span className="text-zinc-700 dark:text-zinc-300">
+                  {entry.sellAmount} {entry.sellSymbol} → {entry.buyAmount}{" "}
+                  {entry.buySymbol}
+                </span>
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                    entry.status === "filled"
+                      ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                      : entry.status === "failed"
+                        ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                        : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                  }`}
+                >
+                  {entry.status === "filled"
+                    ? "Filled"
+                    : entry.status === "failed"
+                      ? "Failed"
+                      : "Pending"}
+                </span>
+              </a>
+            ))}
+          </div>
         </div>
       )}
-    </div>
+
+      {/* Status Modal */}
+      {showStatusModal && intentHash && activeSwapInfo && (
+        <SwapStatusModal
+          txHash={txHash || intentHash}
+          intentHash={intentHash}
+          sellSymbol={activeSwapInfo.sellSymbol}
+          buySymbol={activeSwapInfo.buySymbol}
+          sellAmount={activeSwapInfo.sellAmount}
+          buyAmount={activeSwapInfo.buyAmount}
+          onClose={handleCloseStatusModal}
+          onStatusChange={handleStatusChange}
+        />
+      )}
+    </>
   );
 }
